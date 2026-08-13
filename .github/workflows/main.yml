@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout source
         uses: actions/checkout@v4
 
@@ -25,28 +26,73 @@ jobs:
         with:
           gradle-version: "9.1.0"
 
+      # ------------------------------------------------
+      # Extract the uploaded TEST MITRA ZIP
+      # ------------------------------------------------
+
+      - name: Extract Android project
+        shell: bash
+        run: |
+          set -e
+
+          echo "Searching for TEST MITRA ZIP..."
+
+          ZIP_FILE=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No ZIP file found."
+            exit 1
+          fi
+
+          echo "Found ZIP: $ZIP_FILE"
+
+          mkdir -p /tmp/testmitra
+
+          unzip -o "$ZIP_FILE" -d /tmp/testmitra
+
+          echo "ZIP extracted."
+
+          # Copy project files to repository root
+          cp -a /tmp/testmitra/. .
+
+          echo "Project files:"
+          ls -la
+
+      # ------------------------------------------------
+      # Verify Android project
+      # ------------------------------------------------
+
       - name: Check project structure
         shell: bash
         run: |
           set -e
+
           echo "Checking Android project..."
 
-          test -f settings.gradle.kts || {
+          if [ ! -f "settings.gradle.kts" ]; then
             echo "ERROR: settings.gradle.kts not found"
+            echo "Current directory:"
+            pwd
+            echo "Files:"
+            ls -la
             exit 1
-          }
+          fi
 
-          test -f build.gradle.kts || {
+          if [ ! -f "build.gradle.kts" ]; then
             echo "ERROR: build.gradle.kts not found"
             exit 1
-          }
+          fi
 
-          test -f app/build.gradle.kts || {
+          if [ ! -f "app/build.gradle.kts" ]; then
             echo "ERROR: app/build.gradle.kts not found"
             exit 1
-          }
+          fi
 
           echo "Android project verified successfully."
+
+      # ------------------------------------------------
+      # Create Supabase .env
+      # ------------------------------------------------
 
       - name: Create .env from GitHub Secrets
         shell: bash
@@ -83,19 +129,24 @@ jobs:
 
           echo ".env created successfully."
 
+      # ------------------------------------------------
+      # Build APK
+      # ------------------------------------------------
+
       - name: Build Debug APK
         shell: bash
         run: |
           set -e
 
-          echo "Starting Gradle build..."
+          echo "Building TEST MITRA APK..."
 
-          gradle --no-daemon \
-            --stacktrace \
-            clean \
-            assembleDebug
+          gradle --no-daemon clean assembleDebug
 
           echo "APK build completed successfully."
+
+      # ------------------------------------------------
+      # Find APK
+      # ------------------------------------------------
 
       - name: Find APK
         shell: bash
@@ -108,6 +159,10 @@ jobs:
             -type f \
             -name "*.apk" \
             -print
+
+      # ------------------------------------------------
+      # Upload APK
+      # ------------------------------------------------
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
